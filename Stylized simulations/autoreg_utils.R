@@ -659,7 +659,7 @@ bench_run <- function(n, Tn, reps, thresh, h, mu, sigma, rho, tau,
 # ---------- master wrapper ----------
 run_all_tables <- function(
     gammas = c(0.5, 0.8, 1.0),
-    n_grid = 1000*c(1, 2, 4, 8, 16, 32, 64, 128),
+    n_grid = 500*c(1, 2, 4, 8, 16, 32, 64, 128),
     reps = 2000,
     c0 = 110, h = NULL,
     Tn = 12, mu = 100, sigma = 4, rho = 0.9, tau = 0.1,
