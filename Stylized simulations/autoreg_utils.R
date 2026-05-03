@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-#   Replication Codes for Autoregressive Simulator
+#   Codes for the Autoregressive Simulator
 #   This runs the stylized simulation experiments in the paper:
 #   Non-parametric Causal Inference in Dynamic Thresholding Designs
 #   Aditya Ghosh and Stefan Wager (Stanford University)
