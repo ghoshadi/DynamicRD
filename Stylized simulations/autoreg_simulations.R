@@ -8,7 +8,7 @@
 suppressPackageStartupMessages({
   library(pbmcapply)
 })
-n.cores = 32 # for parallel computation in R (set manually)
+n.cores = parallel::detectCores() # for parallel computation in R
 
 # --------------------------------------------------
 #   Generate data from the Autoregressive process
@@ -732,5 +732,3 @@ run_all_tables <- function(
   
   return(out)
 }
-
-run_all_tables(mu_trend = 0, reps = 2000)
