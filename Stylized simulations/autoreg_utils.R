@@ -6,8 +6,6 @@
 #   arXiv link: https://arxiv.org/abs/2512.15244
 # ---------------------------------------------------------------------------
 
-rm(list=ls())
-
 suppressPackageStartupMessages({
   library(pbmcapply)
 })
