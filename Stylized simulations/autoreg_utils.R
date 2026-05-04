@@ -6,8 +6,12 @@
 #   arXiv link: https://arxiv.org/abs/2512.15244
 # ---------------------------------------------------------------------------
 
+if (!requireNamespace("pbmcapply", quietly = TRUE)) install.packages("pbmcapply")
+if (!requireNamespace("withr", quietly = TRUE)) install.packages("withr")
+
 suppressPackageStartupMessages({
   library(pbmcapply)
+  library(withr)
 })
 
 # --------------------------------------------------
