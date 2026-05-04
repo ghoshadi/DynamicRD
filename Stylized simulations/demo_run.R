@@ -12,6 +12,6 @@ run_all_tables(
     time_fe = TRUE,
     NREP_oracle = 1e6,
     cores = parallel::detectCores(), 
-    save_dir = "./tables",
+    save_dir = "./tables_demo",
     save_tables = TRUE
 )
