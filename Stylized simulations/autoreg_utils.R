@@ -1,17 +1,19 @@
 # ---------------------------------------------------------------------------
-#   Codes for the Autoregressive Simulator
+#   Replication codes for autoregressive simulator
 #   This runs the stylized simulation experiments in the paper:
 #   Non-parametric Causal Inference in Dynamic Thresholding Designs
 #   Aditya Ghosh and Stefan Wager (Stanford University)
-#   ArXiv link: https://arxiv.org/abs/2512.15244
+#   arXiv link: https://arxiv.org/abs/2512.15244
 # ---------------------------------------------------------------------------
+
+rm(list=ls())
+
 suppressPackageStartupMessages({
   library(pbmcapply)
 })
-n.cores = parallel::detectCores() # for parallel computation in R
 
 # --------------------------------------------------
-#   Generate data from the Autoregressive process
+#   Generate data from the autoregressive process
 # --------------------------------------------------
 simu_X <- function(n, Tn, mu, sigma, rho, tau, thresh, mu_trend) {
   mu_t <- mu + mu_trend * (0:Tn)
@@ -36,6 +38,7 @@ K_triangular <- function(u) pmax(1 - abs(u), 0)
 K_uniform <- function(u) 0.5 * (abs(u) <= 1)
 K_epanechnikov <- function(u) 0.75 * pmax(1 - u**2, 0)
 # Or implement any K(u) that integrates to 1 on [-1,1].
+
 
 # --------------------------------------------------
 #   Imbens-Kalyanaraman bandwidth
@@ -124,6 +127,7 @@ IK_bandwidth <- function(Y, X, threshold, kernel = c("triangular", "uniform")) {
 }
 
 
+
 # --------------------------------------------------
 # helper: build design matrix
 # --------------------------------------------------
@@ -148,6 +152,7 @@ IK_bandwidth <- function(Y, X, threshold, kernel = c("triangular", "uniform")) {
   X
 }
 
+
 # --------------------------------------------------
 #   helper: Cholesky solver
 # --------------------------------------------------
@@ -156,12 +161,13 @@ chol_solve <- function(A, B = diag(nrow(A))) {
   backsolve(R, forwardsolve(t(R), B))
 }
 
+
 # --------------------------------------------------
 #   helper: Fast WLS + cluster VCV
 # --------------------------------------------------
 .fast_wls_cr <- function(Xw, yw, ck) {
   A <- crossprod(Xw)
-  A <- A + 1e-6 * max(diag(A), 1e-6) * diag(ncol(Xw))  # relative ridge for stability
+  A <- A + min(abs(diag(A)), 1e-8) * diag(ncol(Xw))  # relative ridge for stability
   Ainv <- chol_solve(A)
   beta <- Ainv %*% crossprod(Xw, yw)
   resid <- yw - Xw %*% beta
@@ -169,6 +175,75 @@ chol_solve <- function(A, B = diag(nrow(A))) {
   meat <- crossprod(U)
   vcov <- Ainv %*% meat %*% Ainv
   list(beta = drop(beta), vcov = vcov, Ainv = Ainv, U = U)
+}
+
+# ── Fast WLS + cluster-robust VCV ─────────────────────────────────────────────
+.fast_wls_cr <- function(Xw, yw, ck,
+                         vcov_type = "CR3",
+                         ridge = 1e-8) {
+  vcov_type <- match.arg(vcov_type)
+  
+  N <- nrow(Xw)
+  p <- ncol(Xw)
+  
+  A <- crossprod(Xw)
+  
+  # Tiny numerical stabilization
+  A_ridge <- A + diag(p) * ridge * max(mean(diag(A)), 1)
+  
+  Ainv <- chol_solve(A_ridge)
+  beta <- Ainv %*% crossprod(Xw, yw)
+  
+  e <- as.numeric(yw - Xw %*% beta)
+  
+  # Raw cluster scores: sum_i X_i e_i within cluster.
+  U0 <- rowsum(Xw * e, group = ck, reorder = FALSE)
+  
+  if (vcov_type == "CR0") {
+    U <- U0
+    meat <- crossprod(U)
+    
+  } else if (vcov_type == "CR1") {
+    U <- U0
+    meat <- crossprod(U)
+    
+  } else if (vcov_type == "CR3") {
+    idx <- split(seq_len(N), ck)
+    G   <- length(idx)
+    U3  <- matrix(0, nrow = G, ncol = p)
+    
+    for (g in seq_along(idx)) {
+      ii <- idx[[g]]
+      Xg <- Xw[ii, , drop = FALSE]
+      eg <- e[ii]
+      
+      ng <- length(ii)
+      Mg <- diag(ng) - Xg %*% Ainv %*% t(Xg)
+      
+      rg <- tryCatch(
+        qr.solve(Mg, eg),
+        error = function(err) {
+          solve(Mg + ridge * diag(ng), eg)
+        }
+      )
+      
+      U3[g, ] <- drop(crossprod(Xg, rg))
+    }
+    
+    U <- U3
+    meat <- crossprod(U)
+  }
+  
+  V <- Ainv %*% meat %*% Ainv
+  
+  if (vcov_type == "CR1") {
+    G <- nrow(U0)
+    if (G > 1 && N > p) {
+      V <- V * (G / (G - 1)) * ((N - 1) / (N - p))
+    }
+  }
+  
+  list(beta = drop(beta), vcov = V, Ainv = Ainv, U = U)
 }
 
 # --------------------------------------------------
@@ -218,6 +293,7 @@ rdd_static <- function(Xmat, thresh, h, K = K_uniform,
   # iW  <- which(colnames(X) == "W")
   # list(est = fit$beta[iW], se = sqrt(fit$vcov[iW, iW]))
 }
+
 
 # --------------------------------------------------
 #   Dynamic RD ratio (proposed method)
@@ -279,7 +355,7 @@ rdd_dynamic <- function(Xmat, thresh, h, disc_factor = 1,
   }
   Xw <- Xw[, keep_cols, drop = FALSE]
   X  <- X[,  keep_cols, drop = FALSE]
-
+  
   fitG <- .fast_wls_cr(Xw, Gk * sw, ck)
   fitH <- .fast_wls_cr(Xw, Hk * sw, ck)
   
@@ -304,6 +380,7 @@ rdd_dynamic <- function(Xmat, thresh, h, disc_factor = 1,
        jump_G = bG, jump_H = bH)
 }
 
+
 # --------------------------------------------------
 #   Naive RD (cross-sectional at t = 1)
 #   LLR of G_{i,1} = sum_{s=1}^T gamma^{s-1} Y_{is}
@@ -312,10 +389,10 @@ rdd_dynamic <- function(Xmat, thresh, h, disc_factor = 1,
 rdd_naive <- function(Xmat, thresh, h, disc_factor = 1, K = K_uniform) {
   stopifnot(is.matrix(Xmat), ncol(Xmat) >= 2L, h > 0)
   n  <- nrow(Xmat); Tn <- ncol(Xmat) - 1L
-
+  
   X_t  <- Xmat[, 1:Tn,        drop = FALSE]
   Ymat <- -Xmat[, 2:(Tn + 1), drop = FALSE]
-
+  
   # discounted forward cumsums (same recursion as rdd_dynamic)
   Gmat <- Ymat
   Hmat <- (X_t >= thresh) * 1.0
@@ -325,44 +402,44 @@ rdd_naive <- function(Xmat, thresh, h, disc_factor = 1, K = K_uniform) {
       Hmat[, t] <- Hmat[, t] + disc_factor * Hmat[, t + 1L]
     }
   }
-
+  
   # cross-sectional slice at t = 1
   Z1   <- X_t[, 1L] - thresh
   W1   <- as.numeric(Z1 >= 0)
   wK   <- K(Z1 / h)
   keep <- wK > 0
   if (!any(keep)) stop("No obs in bandwidth (naive).")
-
+  
   Zk <- Z1[keep];      Wk <- W1[keep]
   Gk <- Gmat[keep, 1L]; Hk <- Hmat[keep, 1L]
   ck <- seq_len(n)[keep]          # one cluster per unit (cross-sectional)
   sw <- sqrt(wK[keep])
-
+  
   X  <- cbind(Intercept = 1.0, Z = Zk, W = Wk, ZxW = Zk * Wk)
   Xw <- X * sw
-
+  
   keep_cols <- colSums(abs(Xw)) > 0
   if (!keep_cols[which(colnames(X) == "W")]) stop("No variation in W (naive).")
   Xw <- Xw[, keep_cols, drop = FALSE]
   X  <- X[,  keep_cols, drop = FALSE]
   iW <- which(colnames(X) == "W")
-
+  
   fitG <- .fast_wls_cr(Xw, Gk * sw, ck)
   fitH <- .fast_wls_cr(Xw, Hk * sw, ck)
-
+  
   bG <- fitG$beta[iW]; bH <- fitH$beta[iW]
   if (!is.finite(bH) || !is.finite(bG)) stop("Non-finite jump estimate (naive).")
   if (abs(bH) < 0.1) warning(sprintf("Naive: |bH| = %.4f is small; ratio may be unstable.", abs(bH)))
-
+  
   VG  <- fitG$vcov[iW, iW]; VH <- fitH$vcov[iW, iW]
   inflG  <- fitG$U %*% t(fitG$Ainv)
   inflH  <- fitH$U %*% t(fitH$Ainv)
   Cov_GH <- sum(inflG[, iW] * inflH[, iW])
-
+  
   tau_hat <- bG / bH
   var_tau  <- (VG + tau_hat^2 * VH - 2 * tau_hat * Cov_GH) / bH^2
   se_tau   <- sqrt(max(var_tau, 0))
-
+  
   list(est = tau_hat, se = se_tau)
 }
 
@@ -375,7 +452,7 @@ oracle_values <- function(thresholds,
                           disc_factor, 
                           Tn, mu, rho, tau, sigma,
                           batch_oracle = 2e5,
-                          mc.cores = n.cores,
+                          mc.cores = 1,
                           base_seed = 42,
                           mu_trend = 0) {
   w <- disc_factor^(0:(Tn - 1))
@@ -389,8 +466,8 @@ oracle_values <- function(thresholds,
       while (done < NREP_oracle) {
         nb <- min(batch_oracle , NREP_oracle - done)
         X <- simu_X(n = nb, Tn = Tn, mu = mu, sigma = sigma, 
-                                  rho = rho, tau = tau, thresh = thr,
-                                  mu_trend = mu_trend)
+                    rho = rho, tau = tau, thresh = thr,
+                    mu_trend = mu_trend)
         Z <- X[, 1:Tn, drop = FALSE]
         Y <- -X[, 2:(Tn + 1), drop = FALSE]
         sG <- sG + sum(Y %*% w)
@@ -409,6 +486,7 @@ oracle_values <- function(thresholds,
   as.data.frame(do.call(rbind, out))
 }
 
+
 # --------------------------------------------------
 #   tau_RD oracle computation
 #   tau_RD(c0) = dValG/dc / dValH/dc  (density cancels)
@@ -426,6 +504,7 @@ compute_tauRD <- function(c0, grid, Tn, mu, rho, tau, sigma, disc_factor,
   dH <- predict(sH, c0, deriv = 1)$y
   dG / dH
 }
+
 
 # --------------------------------------------------
 #   Run experiments in parallel
@@ -546,7 +625,7 @@ bench_run <- function(n, Tn, reps, thresh, h, mu, sigma, rho, tau,
 # ---------- precompute tau_RD(gamma) ----------
 .precompute_tauRDs <- function(gammas, c0, grid, Tn, mu, rho, tau, sigma,
                                NREP_oracle = 1e7, batch_oracle = 2e5,
-                               cores = n.cores, mu_trend) {
+                               cores = 1, mu_trend) {
   out <- vapply(
     gammas,
     function(g) compute_tauRD(
@@ -566,7 +645,7 @@ bench_run <- function(n, Tn, reps, thresh, h, mu, sigma, rho, tau,
 .run_one_gamma <- function(gamma, n_grid, reps, c0, h, Tn, 
                            mu, sigma, rho, tau,
                            tauRD_map, 
-                           cores = n.cores,
+                           cores = 1,
                            K = K_uniform,
                            time_fe = FALSE,
                            time_fe_Z = FALSE,
@@ -659,7 +738,7 @@ bench_run <- function(n, Tn, reps, thresh, h, mu, sigma, rho, tau,
 # ---------- master wrapper ----------
 run_all_tables <- function(
     gammas = c(0.5, 0.8, 1.0),
-    n_grid = 500*c(1, 2, 4, 8, 16, 32, 64, 128),
+    n_grid = 1000*c(.5, 1, 2, 4, 8, 16, 32, 64),
     reps = 2000,
     c0 = 110, h = NULL,
     Tn = 12, mu = 100, sigma = 4, rho = 0.9, tau = 0.1,
@@ -669,8 +748,8 @@ run_all_tables <- function(
     time_fe_ZxW = FALSE,
     NREP_oracle = 5e6, 
     batch_oracle = 2e5, grid_span = 5,
-    cores = n.cores, mu_trend = 1,
-    save_dir = "./tables",
+    cores = 1, mu_trend = 1,
+    save_dir = "./tables_cr3",
     save_tables = TRUE
 ) {
   if (save_tables) {
