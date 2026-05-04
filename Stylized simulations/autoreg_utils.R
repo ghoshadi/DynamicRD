@@ -1,6 +1,5 @@
 # ---------------------------------------------------------------------------
-#   Replication codes for autoregressive simulator
-#   This runs the stylized simulation experiments in the paper:
+#   Replication codes for autoregressive simulator experiments in the paper:
 #   Non-parametric Causal Inference in Dynamic Thresholding Designs
 #   Aditya Ghosh and Stefan Wager (Stanford University)
 #   arXiv link: https://arxiv.org/abs/2512.15244
@@ -40,7 +39,6 @@ K_triangular <- function(u) pmax(1 - abs(u), 0)
 K_uniform <- function(u) 0.5 * (abs(u) <= 1)
 K_epanechnikov <- function(u) 0.75 * pmax(1 - u**2, 0)
 # Or implement any K(u) that integrates to 1 on [-1,1].
-
 
 # --------------------------------------------------
 #   Imbens-Kalyanaraman bandwidth
@@ -128,8 +126,6 @@ IK_bandwidth <- function(Y, X, threshold, kernel = c("triangular", "uniform")) {
   )
 }
 
-
-
 # --------------------------------------------------
 # helper: build design matrix
 # --------------------------------------------------
@@ -154,7 +150,6 @@ IK_bandwidth <- function(Y, X, threshold, kernel = c("triangular", "uniform")) {
   X
 }
 
-
 # --------------------------------------------------
 #   helper: Cholesky solver
 # --------------------------------------------------
@@ -163,23 +158,9 @@ chol_solve <- function(A, B = diag(nrow(A))) {
   backsolve(R, forwardsolve(t(R), B))
 }
 
-
 # --------------------------------------------------
 #   helper: Fast WLS + cluster VCV
 # --------------------------------------------------
-.fast_wls_cr <- function(Xw, yw, ck) {
-  A <- crossprod(Xw)
-  A <- A + min(abs(diag(A)), 1e-8) * diag(ncol(Xw))  # relative ridge for stability
-  Ainv <- chol_solve(A)
-  beta <- Ainv %*% crossprod(Xw, yw)
-  resid <- yw - Xw %*% beta
-  U <- rowsum(Xw * as.numeric(resid), group = ck, reorder = FALSE)  # cluster sums of X'e
-  meat <- crossprod(U)
-  vcov <- Ainv %*% meat %*% Ainv
-  list(beta = drop(beta), vcov = vcov, Ainv = Ainv, U = U)
-}
-
-# ── Fast WLS + cluster-robust VCV ─────────────────────────────────────────────
 .fast_wls_cr <- function(Xw, yw, ck,
                          vcov_type = "CR3",
                          ridge = 1e-8) {
@@ -249,7 +230,7 @@ chol_solve <- function(A, B = diag(nrow(A))) {
 }
 
 # --------------------------------------------------
-#   Standard (static) Local Linear Regression
+#   Standard (Static) Local Linear Regression
 # --------------------------------------------------
 rdd_static <- function(Xmat, thresh, h, K = K_uniform, 
                        time_fe = FALSE, time_fe_Z = FALSE, time_fe_ZxW = FALSE) {
@@ -290,15 +271,10 @@ rdd_static <- function(Xmat, thresh, h, K = K_uniform,
   iW_red <- which(colnames(X_red) == "W")
   fit <- .fast_wls_cr(Xw_red, yw, ck)
   list(est = fit$beta[iW_red], se = sqrt(fit$vcov[iW_red, iW_red]))
-  
-  # fit <- .fast_wls_cr(Xw, yw, ck)
-  # iW  <- which(colnames(X) == "W")
-  # list(est = fit$beta[iW], se = sqrt(fit$vcov[iW, iW]))
 }
 
-
 # --------------------------------------------------
-#   Dynamic RD ratio (proposed method)
+#   Dynamic RD (proposed method)
 # --------------------------------------------------
 rdd_dynamic <- function(Xmat, thresh, h, disc_factor = 1, 
                         weights_by_time = TRUE,
@@ -381,7 +357,6 @@ rdd_dynamic <- function(Xmat, thresh, h, disc_factor = 1,
   list(est = tau_hat, se = se_tau, VG = VG, VH = VH, Cov_GH = Cov_GH,
        jump_G = bG, jump_H = bH)
 }
-
 
 # --------------------------------------------------
 #   Naive RD (cross-sectional at t = 1)
@@ -488,7 +463,6 @@ oracle_values <- function(thresholds,
   as.data.frame(do.call(rbind, out))
 }
 
-
 # --------------------------------------------------
 #   tau_RD oracle computation
 #   tau_RD(c0) = dValG/dc / dValH/dc  (density cancels)
@@ -506,7 +480,6 @@ compute_tauRD <- function(c0, grid, Tn, mu, rho, tau, sigma, disc_factor,
   dH <- predict(sH, c0, deriv = 1)$y
   dG / dH
 }
-
 
 # --------------------------------------------------
 #   Run experiments in parallel
