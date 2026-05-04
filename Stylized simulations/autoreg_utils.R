@@ -724,7 +724,7 @@ run_all_tables <- function(
     NREP_oracle = 5e6, 
     batch_oracle = 2e5, grid_span = 5,
     cores = 1, mu_trend = 1,
-    save_dir = "./tables_cr3",
+    save_dir = "./tables",
     save_tables = TRUE
 ) {
   if (save_tables) {
