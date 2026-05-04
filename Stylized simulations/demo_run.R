@@ -1,4 +1,5 @@
 rm(list=ls())
+
 source("./autoreg_utils.R")
 
 run_all_tables(
@@ -10,7 +11,7 @@ run_all_tables(
     K = K_uniform, 
     time_fe = TRUE,
     NREP_oracle = 1e6,
-    cores = n.cores, 
+    cores = parallel::detectCores(), 
     save_dir = "./tables",
     save_tables = TRUE
 )
