@@ -730,7 +730,7 @@ run_all_tables <- function(
   if (save_tables) {
     dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
   }
-  
+  cat("Estimating tauRD as an oracle using", NREP_oracle, "trajectories...")
   grid <- seq(c0 - grid_span, c0 + grid_span, by = 1)
   
   tauRD_map <- .precompute_tauRDs(
